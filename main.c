@@ -11,11 +11,22 @@ GLuint prog;
 GLuint vao;
 GLuint vbo;
 
+struct timespec t_org;
+GLuint timeUniform;
+
+float diff_timespec(const struct timespec* t1, const struct timespec* t0)
+{
+    float second = difftime(t1->tv_sec, t0->tv_sec);
+    return second + ((float)t1->tv_nsec - (float)t0->tv_nsec) / 1e9;
+}
+
 void reload_shaders_attribs(void)
 {
     GLint posAttrib = glGetAttribLocation(prog, "iPosition");
     glEnableVertexAttribArray(posAttrib);
     glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, sizeof(float)*2, 0);
+
+    timeUniform = glGetUniformLocation(prog, "iTime");
 }
 
 void reload_shaders(void)
@@ -35,8 +46,8 @@ void reload_shaders(void)
     glDeleteShader(frag);
 
     glLinkProgram(prog);
-    reload_shaders_attribs();
     glUseProgram(prog);
+    reload_shaders_attribs();
 }
 
 void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -58,11 +69,12 @@ void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods
         if (key == GLFW_KEY_F5)
         {
             reload_shaders();
+            clock_gettime(CLOCK_REALTIME, &t_org);
         }
     }
 }
 
-void on_load(void)
+void bgl_on_load(void)
 {
     float vertices[] = BGL_RECT_VERT;
 
@@ -77,20 +89,22 @@ void on_load(void)
 
     BGL_Window* window = glfwGetCurrentContext();
     glfwSetKeyCallback(window, my_keycalls);
+
+    clock_gettime(CLOCK_REALTIME, &t_org);
 }
 
-void on_update(void)
+void bgl_on_update(void)
 {
-    BGL_Window* window = glfwGetCurrentContext();
     glBindVertexArray(vao);
-
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    glfwSwapBuffers(window);
-    sleep(0.5);
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+    float diff = diff_timespec(&now, &t_org);
+    glUniform1f(timeUniform, diff);
 }
 
-void on_exit(void)
+void bgl_on_exit(void)
 {
     glDetachShader(prog, vert);
     glDetachShader(prog, frag);
@@ -99,9 +113,9 @@ void on_exit(void)
 
 int main(void)
 {
-    bgl_init(on_load);
-    bgl_loop(on_update);
-    bgl_exit(on_exit);
+    bgl_init(bgl_on_load);
+    bgl_loop(bgl_on_update);
+    bgl_exit(bgl_on_exit);
 
     return EXIT_SUCCESS;
 }

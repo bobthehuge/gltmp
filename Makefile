@@ -1,6 +1,6 @@
 CC = gcc
 CPPFLAGS = -MMD
-CFLAGS = -Wall -Wextra -g -std=c99 -lm `pkg-config --cflags bobgl`
+CFLAGS = -Wall -Wextra -g `pkg-config --cflags bobgl`
 LDFLAGS = -lm
 LDLIBS = `pkg-config --libs bobgl`
 
