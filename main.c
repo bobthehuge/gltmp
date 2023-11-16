@@ -11,8 +11,14 @@ GLuint prog;
 GLuint vao;
 GLuint vbo;
 
+#define RESX 1920
+#define RESY 1080
+#define DWINOPT {RESX, RESY, "baise", 0, 0}
+
 struct timespec t_org;
 GLuint timeUniform;
+GLuint resolutionUniform;
+GLuint mouseUniform;
 
 float diff_timespec(const struct timespec* t1, const struct timespec* t0)
 {
@@ -22,11 +28,14 @@ float diff_timespec(const struct timespec* t1, const struct timespec* t0)
 
 void reload_shaders_attribs(void)
 {
-    GLint posAttrib = glGetAttribLocation(prog, "iPosition");
+    GLint posAttrib = glGetAttribLocation(prog, "Position");
     glEnableVertexAttribArray(posAttrib);
     glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, sizeof(float)*2, 0);
 
     timeUniform = glGetUniformLocation(prog, "iTime");
+	resolutionUniform = glGetUniformLocation(prog, "iResolution");
+	mouseUniform = glGetUniformLocation(prog, "iMouse");
+	glUniform2f(resolutionUniform, RESX, RESY);
 }
 
 void reload_shaders(void)
@@ -76,6 +85,14 @@ void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods
 
 void bgl_on_load(void)
 {
+
+	BGL_Window* win = glfwGetCurrentContext();
+	glfwDestroyWindow(win);
+	struct BGL_Winopt winopt = DWINOPT;
+	win = bgl_create_window(&winopt);
+    glfwSetKeyCallback(win, my_keycalls);
+	glfwMakeContextCurrent(win);
+
     float vertices[] = BGL_RECT_VERT;
 
     glGenVertexArrays(1, &vao);
@@ -87,14 +104,18 @@ void bgl_on_load(void)
 
     reload_shaders();
 
-    BGL_Window* window = glfwGetCurrentContext();
-    glfwSetKeyCallback(window, my_keycalls);
-
     clock_gettime(CLOCK_REALTIME, &t_org);
+}
+
+void update_iMouse(BGL_Window* window, double xpos, double ypos)
+{
+	(void) window;
+	glUniform2f(mouseUniform, xpos, ypos);
 }
 
 void bgl_on_update(void)
 {
+	BGL_Window* win = glfwGetCurrentContext();
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -102,6 +123,8 @@ void bgl_on_update(void)
     clock_gettime(CLOCK_REALTIME, &now);
     float diff = diff_timespec(&now, &t_org);
     glUniform1f(timeUniform, diff);
+
+	glfwSetCursorPosCallback(win, update_iMouse);
 }
 
 void bgl_on_exit(void)

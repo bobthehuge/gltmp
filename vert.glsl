@@ -1,12 +1,10 @@
 #version 330 core
 
-in vec3 iPosition;
-uniform float iTime;
+in vec3 Position;
+out vec2 fragCoord;
 
-out vec4 vertexColor;
-
-void main()
+void main() 
 {
-    gl_Position = vec4(iPosition, 1.0);
-    vertexColor = vec4(cos(iTime)*iPosition.x, 1.0, 1.0, 1.0);
+	gl_Position = vec4(Position, 1.0);
+	fragCoord = Position.xy;
 }
