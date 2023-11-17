@@ -5,10 +5,8 @@ out vec4 fragColor;
 in vec2 fragCoord; 
 
 uniform float iTime;
-uniform vec2 iResolution;
-uniform vec2 iMouse;
 
-vec3 palette( float t ) 
+vec3 palette(float t) 
 {
     vec3 a = vec3(0.5, 0.5, 0.5);
     vec3 b = vec3(0.5, 0.5, 0.5);
@@ -38,4 +36,6 @@ void main()
 
         finalColor += col * d;
     }
+
+    fragColor = vec4(finalColor, 1.0);
 }

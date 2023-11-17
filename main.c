@@ -13,7 +13,12 @@ GLuint vbo;
 
 #define RESX 1920
 #define RESY 1080
-#define DWINOPT {RESX, RESY, "baise", 0, 0}
+#define DWINOPT {RESX, RESY, "BobAfkRender", 0, 0}
+
+#define NAME "Julia"
+
+#define VERT_SHADER "vert.glsl"
+#define FRAG_SHADER "frag"NAME".glsl"
 
 struct timespec t_org;
 GLuint timeUniform;
@@ -33,9 +38,9 @@ void reload_shaders_attribs(void)
     glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, sizeof(float)*2, 0);
 
     timeUniform = glGetUniformLocation(prog, "iTime");
-	resolutionUniform = glGetUniformLocation(prog, "iResolution");
-	mouseUniform = glGetUniformLocation(prog, "iMouse");
-	glUniform2f(resolutionUniform, RESX, RESY);
+    resolutionUniform = glGetUniformLocation(prog, "iResolution");
+    mouseUniform = glGetUniformLocation(prog, "iMouse");
+    glUniform2f(resolutionUniform, RESX, RESY);
 }
 
 void reload_shaders(void)
@@ -45,8 +50,8 @@ void reload_shaders(void)
     glDeleteProgram(prog);
 
     prog = glCreateProgram();
-    vert = bgl_new_shader(GL_VERTEX_SHADER, "vert.glsl");
-    frag = bgl_new_shader(GL_FRAGMENT_SHADER, "frag.glsl");
+    vert = bgl_new_shader(GL_VERTEX_SHADER, VERT_SHADER);
+    frag = bgl_new_shader(GL_FRAGMENT_SHADER, FRAG_SHADER);
 
     glAttachShader(prog, vert);
     glAttachShader(prog, frag);
@@ -86,12 +91,12 @@ void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods
 void bgl_on_load(void)
 {
 
-	BGL_Window* win = glfwGetCurrentContext();
-	glfwDestroyWindow(win);
-	struct BGL_Winopt winopt = DWINOPT;
-	win = bgl_create_window(&winopt);
+    BGL_Window* win = glfwGetCurrentContext();
+    glfwDestroyWindow(win);
+    struct BGL_Winopt winopt = DWINOPT;
+    win = bgl_create_window(&winopt);
     glfwSetKeyCallback(win, my_keycalls);
-	glfwMakeContextCurrent(win);
+    glfwMakeContextCurrent(win);
 
     float vertices[] = BGL_RECT_VERT;
 
@@ -109,13 +114,13 @@ void bgl_on_load(void)
 
 void update_iMouse(BGL_Window* window, double xpos, double ypos)
 {
-	(void) window;
-	glUniform2f(mouseUniform, xpos, ypos);
+    (void) window;
+    glUniform2f(mouseUniform, xpos, ypos);
 }
 
 void bgl_on_update(void)
 {
-	BGL_Window* win = glfwGetCurrentContext();
+    BGL_Window* win = glfwGetCurrentContext();
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -124,7 +129,7 @@ void bgl_on_update(void)
     float diff = diff_timespec(&now, &t_org);
     glUniform1f(timeUniform, diff);
 
-	glfwSetCursorPosCallback(win, update_iMouse);
+    glfwSetCursorPosCallback(win, update_iMouse);
 }
 
 void bgl_on_exit(void)

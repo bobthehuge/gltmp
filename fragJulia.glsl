@@ -39,5 +39,4 @@ void main()
     }
         
     fragColor = vec4(colj, 1.0);
-    vec2 p = (2.0*fragCoord-iResolution.xy)/iResolution.y;
 }
