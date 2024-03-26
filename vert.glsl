@@ -1,6 +1,6 @@
 #version 330 core
 
-layout (location = 0) in vec3 Position;
+in vec3 Position;
 out vec2 texCoord;
 
 void main() 
