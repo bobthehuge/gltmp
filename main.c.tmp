@@ -10,7 +10,7 @@
 #define DWINOPT {RESX, RESY, "BobAfkRender", 0, 1}
 
 #define NAME0 "Display"     // MAIN
-#define NAMEA "Test"        // BUFFER A
+#define NAMEA "Life"        // BUFFER A
 #define NAMEB ""            // BUFFER B
 #define NAMEC ""            // BUFFER C
 #define NAMED ""            // BUFFER D
@@ -25,33 +25,48 @@
 
 struct timespec t_org;
 
-GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
 
 struct Framebuffer
 {
     GLuint loc;
-    GLuint attach0;
-    GLuint attach1;
+    GLuint tex;
 };
 
-struct Shader
+struct Buffer
 {
     GLuint prog;
     char *frag_path;
     GLuint frag;
     GLuint vert;
+    struct Framebuffer fbo;
 };
 
-struct Shader disp = { 0, FRAG0, 0, 0 };
-struct Shader life = { 0, FRAGA, 0, 0 };
+struct Buffer buffers[] = {
+    { 0, FRAG0, 0, 0, { 0, 0 } },
+    { 0, FRAGA, 0, 0, { 0, 0 } },
+    { 0, FRAGB, 0, 0, { 0, 0 } },
+    { 0, FRAGC, 0, 0, { 0, 0 } },
+    { 0, FRAGD, 0, 0, { 0, 0 } },
+};
 
-struct Framebuffer life_fbo = { 0, 0, 0 };
+struct Buffer *buffer0 = buffers;
+struct Buffer *bufferA = buffers + 1;
 
-GLuint display_tex;
+struct Framebuffer channels[] = {
+    { 0, 0 },
+    { 0, 0 },
+};
+
+struct Framebuffer *channel0 = channels;
+struct Framebuffer *channel1 = channels + 1;
+
+/* GLuint channels[] = {0, 0, 0, 0}; */
+/* GLuint *channel0 = channels; */
+/* GLuint *channel1 = channels + 1; */
 
 GLuint vao;
 GLuint vbo;
-GLuint ebo;
 GLuint prog;
 
 GLuint curr;
@@ -68,9 +83,9 @@ float diff_timespec(const struct timespec* t1, const struct timespec* t0)
 
 void reload_shaders_attribs(GLuint prog)
 {
-    /* GLuint position_loc = glGetAttribLocation(prog, "Position"); */
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float)*2, 0);
-    glEnableVertexAttribArray(0);
+    GLuint position_loc = glGetAttribLocation(prog, "Position");
+    glEnableVertexAttribArray(position_loc);
+    glVertexAttribPointer(position_loc, 2, GL_FLOAT, GL_FALSE, sizeof(float)*2, 0);
 
     /* mouseUniform = glGetUniformLocation(prog, "iMouse"); */
 
@@ -80,15 +95,13 @@ void reload_shaders_attribs(GLuint prog)
     /* glUniform1i(glGetUniformLocation(prog, "iChannel3"), 3); */
 
     glUniform2f(glGetUniformLocation(prog, "iResolution"), RESX, RESY);
-    glUniform1f(glGetUniformLocation(prog, "iTime"), diff);
-    glUniform1ui(glGetUniformLocation(prog, "iFrame"), frame_count);
 }
 
-void create_shader(struct Shader *shader)
+void create_shader(struct Buffer *buffer)
 {
     GLuint prog = glCreateProgram();
     GLuint vert = bgl_new_shader(GL_VERTEX_SHADER, VERTX);
-    GLuint frag = bgl_new_shader(GL_FRAGMENT_SHADER, shader->frag_path);
+    GLuint frag = bgl_new_shader(GL_FRAGMENT_SHADER, buffer->frag_path);
 
     glAttachShader(prog, vert);
     glAttachShader(prog, frag);
@@ -98,26 +111,30 @@ void create_shader(struct Shader *shader)
 
     glLinkProgram(prog);
 
-    shader->prog = prog;
-    shader->vert = vert;
-    shader->frag = frag;
+    /* glUseProgram(prog); */
+
+
+    buffer->prog = prog;
+    buffer->vert = vert;
+    buffer->frag = frag;
 }
 
-void delete_shader(struct Shader *shader)
+void delete_shader(struct Buffer *buffer)
 {
-    glDetachShader(shader->prog, shader->vert);
-    glDetachShader(shader->prog, shader->frag);
-    glDeleteProgram(shader->prog);
+    glDetachShader(buffer->prog, buffer->vert);
+    glDetachShader(buffer->prog, buffer->frag);
+    glDeleteProgram(buffer->prog);
 }
 
-void reload_shader(struct Shader *shader)
+void reload_shader(struct Buffer *buffer)
 {
-    delete_shader(shader);
-    create_shader(shader);
+    delete_shader(buffer);
+    create_shader(buffer);
 }
 
-void attach_tex(struct Framebuffer *fbo, GLuint *attach, GLenum attach_type)
+void create_fbo(struct Framebuffer *buffer)
 {
+    GLuint fbo = 0;
     GLuint tex = 0;
 
     glGenTextures(1, &tex);
@@ -125,60 +142,29 @@ void attach_tex(struct Framebuffer *fbo, GLuint *attach, GLenum attach_type)
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RESX, RESY, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo->loc);
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glFramebufferTexture2D(GL_FRAMEBUFFER, attach_type, GL_TEXTURE_2D, tex, 0);
-    glDrawBuffers(2, drawBuffers);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+    glDrawBuffers(1, drawBuffers);
 
-    /* glBindTexture(GL_TEXTURE_2D, 0); */
+    glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glActiveTexture(GL_TEXTURE0);
 
-    *attach = tex;
+    buffer->loc = fbo;
+    buffer->tex = tex;
 }
 
-void attach_rbo(struct Framebuffer *buffer, GLuint *attach, GLenum attach_type)
+void delete_fbo(struct Framebuffer *buffer)
 {
-    GLuint rbuf = 0;
-
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->loc);
-
-    glGenRenderbuffers(1, &rbuf);
-    glBindRenderbuffer(GL_RENDERBUFFER, rbuf);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, RESX, RESY);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, attach_type, GL_RENDERBUFFER, rbuf);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-    *attach = rbuf;
-}
-
-void create_fbo(struct Framebuffer *buffer)
-{
-    glGenFramebuffers(1, &buffer->loc);
-
-    /* glBindFramebuffer(GL_FRAMEBUFFER, 0); */
-
-}
-
-void delete_texfbo(struct Framebuffer *buffer)
-{
-    glDeleteTextures(1, &buffer->attach0);
-    glDeleteTextures(1, &buffer->attach1);
     glDeleteFramebuffers(1, &buffer->loc);
-}
-
-void delete_renderfbo(struct Framebuffer *buffer)
-{
-    glDeleteRenderbuffers(1, &buffer->attach0);
-    glDeleteRenderbuffers(1, &buffer->attach1);
-    glDeleteFramebuffers(1, &buffer->loc);
+    glDeleteTextures(1, &buffer->tex);
 }
 
 void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -199,8 +185,8 @@ void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods
         }
         if (key == GLFW_KEY_F5)
         {
-            reload_shader(&disp);
-            reload_shader(&life);
+            reload_shader(buffer0);
+            reload_shader(bufferA);
             clock_gettime(CLOCK_REALTIME, &t_org);
         }
     }
@@ -209,8 +195,8 @@ void my_keycalls(GLFWwindow* window, int key, int scancode, int action, int mods
 void update_iMouse(BGL_Window* window, double xpos, double ypos)
 {
     (void) window;
-    glUniform2f(glGetUniformLocation(life.prog, "iMouse"), xpos, ypos);
-    glUniform2f(glGetUniformLocation(disp.prog, "iMouse"), xpos, ypos);
+    glUniform2f(glGetUniformLocation(buffer0->prog, "iMouse"), xpos, ypos);
+    glUniform2f(glGetUniformLocation(bufferA->prog, "iMouse"), xpos, ypos);
 }
 
 void framebuffer_size_callback(BGL_Window *window, int width, int height)
@@ -228,8 +214,7 @@ void bgl_on_load(void)
     glfwSetKeyCallback(win, my_keycalls);
     glfwMakeContextCurrent(win);
 
-    float vertices[] = BGL_WIN_RECT;
-    int indices[] = BGL_RECT_IDX;
+    float vertices[] = BGL_RECT_VERT;
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -238,36 +223,31 @@ void bgl_on_load(void)
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+///////////////               FBOs              ///////////////
 
-    create_shader(&disp);
-    create_shader(&life);
+    create_fbo(&buffer0->fbo);
+    create_shader(buffer0);
+    create_fbo(&bufferA->fbo);
+    create_shader(bufferA);
 
-    create_fbo(&life_fbo);
-    /* attach_rbo(&life_fbo, &life_fbo.attach0, GL_COLOR_ATTACHMENT0); */
-    /* attach_rbo(&life_fbo, &life_fbo.attach1, GL_COLOR_ATTACHMENT1); */
-    attach_tex(&life_fbo, &life_fbo.attach1, GL_COLOR_ATTACHMENT1);
-    attach_tex(&life_fbo, &life_fbo.attach0, GL_COLOR_ATTACHMENT0);
+///////////////             CHANNELS            ///////////////
 
-    /* glBindFramebuffer(GL_FRAMEBUFFER, life_fbo.loc); */
-    /* glDrawBuffer(GL_COLOR_ATTACHMENT0); */
-    /* glBindFramebuffer(GL_FRAMEBUFFER, 0); */
+    create_fbo(channel0);
+    /* create_fbo(channel1); */
 
-    glBindFramebuffer(GL_FRAMEBUFFER, life_fbo.loc);
-    glViewport(0, 0, RESX, RESY);
+    /* glBindFramebuffer(GL_FRAMEBUFFER, bufferA->fbo.loc); */
+    /* glViewport(0, 0, RESX, RESY); */
     /* glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, channel0->tex, 0); */
-    glDrawBuffers(2, drawBuffers);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glActiveTexture(GL_TEXTURE0);
 
-    prog = life.prog;
+    prog = bufferA->prog;
 
-    /* curr = bufferA->fbo.tex; */
-    /* next = channel0->tex; */
+    curr = bufferA->fbo.tex;
+    next = channel0->tex;
     /* glUseProgram(prog); */
 
     glfwSetCursorPosCallback(win, update_iMouse);
@@ -288,64 +268,60 @@ void bgl_on_update(void)
 
 //////////////////////////////
 
-    prog = life.prog;
+    GLuint prog = bufferA->prog;
 
     glUseProgram(prog);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, life_fbo.loc);
+    glBindFramebuffer(GL_FRAMEBUFFER, bufferA->fbo.loc);
     glViewport(0, 0, RESX, RESY);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, life_fbo.attach0, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, life_fbo.attach1, 0);
-    /* glDrawBuffer(GL_COLOR_ATTACHMENT0); */
-    glDrawBuffers(2, drawBuffers);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, curr, 0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
 
     reload_shaders_attribs(prog);
 
-    /* int status = frame_count % 2 == 0 ? 0 : 1; */
+    int status = frame_count % 2 == 0 ? 0 : 1;
     /* glDrawBuffers(1, drawBuffers + status); */
+    /* glDrawBuffers(2, drawBuffers); */
+    glDrawBuffers(1, drawBuffers);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, life_fbo.attach0);
-    glUniform1i(glGetUniformLocation(prog, "iChannel0"), 0);
+    glActiveTexture(GL_TEXTURE0 + status);
+    glBindTexture(GL_TEXTURE_2D, next);
+    glUniform1i(glGetUniformLocation(prog, "iChannel0"), status);
+    glUniform1f(glGetUniformLocation(prog, "iTime"), diff);
+    glUniform1ui(glGetUniformLocation(prog, "iFrame"), frame_count);
 
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, life_fbo.attach1);
-    glUniform1i(glGetUniformLocation(prog, "iChannel1"), 1);
-
-    glActiveTexture(GL_TEXTURE0);
-
-    /* /1* glClearColor(0.0, 0.0, 0.0, 1.0); *1/ */
-    /* /1* glClear(GL_COLOR_BUFFER_BIT); *1/ */
+    /* glClearColor(0.0, 0.0, 0.0, 1.0); */
+    /* glClear(GL_COLOR_BUFFER_BIT); */
     glBindVertexArray(vao);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 
 //////////////////////////////
 
-    prog = disp.prog;
-    /* prog = life.prog; */
+    prog = buffer0->prog;
 
     glUseProgram(prog);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, RESX, RESY);
+
     reload_shaders_attribs(prog);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, life_fbo.attach0);
+    glBindTexture(GL_TEXTURE_2D, curr);
     glUniform1i(glGetUniformLocation(prog, "iChannel0"), 0);
+    glUniform1f(glGetUniformLocation(prog, "iTime"), diff);
+    glUniform1ui(glGetUniformLocation(prog, "iFrame"), frame_count);
 
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, life_fbo.attach1);
-    glUniform1i(glGetUniformLocation(prog, "iChannel1"), 1);
-
-    glActiveTexture(GL_TEXTURE0);
-
+    /* glClearColor(0.0, 0.0, 0.0, 1.0); */
+    /* glClear(GL_COLOR_BUFFER_BIT); */
     glBindVertexArray(vao);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 
 //////////////////////////////
+
+    curr ^= next;
+    next ^= curr;
+    curr ^= next;
 
     sleep(1);
 
@@ -359,12 +335,19 @@ void bgl_on_update(void)
 void bgl_on_exit(void)
 {
     glDeleteBuffers(1, &vao);
-    glDeleteBuffers(1, &ebo);
+    glDeleteBuffers(1, &vbo);
 
-    delete_texfbo(&life_fbo);
-    glDeleteTextures(1, &display_tex);
-    delete_shader(&disp);
-    delete_shader(&life);
+    /* glDeleteTextures(1, channel0); */
+    /* glDeleteTextures(1, channel1); */
+
+    delete_shader(buffer0);
+    delete_fbo(&buffer0->fbo);
+
+    delete_shader(bufferA);
+    delete_fbo(&bufferA->fbo);
+
+    delete_fbo(channel0);
+    delete_fbo(channel1);
 }
 
 int main(void)
